@@ -163,6 +163,7 @@ def run_probs_GPT3(frame, engine, tag, preset='qa', verbose=False):
 
     return frame
 
+
 def run_phi3(frame, engine, tag, preset='qa', device=None, cache_dir=None):
     """Stores answers from the Phi 3 model"""
     if tag not in frame.columns:
@@ -178,8 +179,16 @@ def run_phi3(frame, engine, tag, preset='qa', device=None, cache_dir=None):
         if pd.isnull(frame.loc[idx, tag]) or not len(frame.loc[idx, tag]):
             prompt = format_prompt(frame.loc[idx], preset, format='general')
             if prompt is not None:
-                input_ids = tokenizer(prompt, return_tensors='pt').input_ids.to(device)
-                output_ids = model.generate(input_ids, top_k=1)[0]
+                inputs = tokenizer(prompt, return_tensors='pt', padding=True, truncation=True)
+                input_ids = inputs.input_ids.to(device)
+                attention_mask = inputs.attention_mask.to(device)  # Include attention mask
+
+                output_ids = model.generate(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id
+                )[0]
+
                 response = tokenizer.decode(output_ids, skip_special_tokens=True)
 
                 frame.loc[idx, tag] = response
@@ -212,11 +221,13 @@ def run_probs_phi3(frame, engine, tag, preset='qa', device=None, cache_dir=None)
             input_text = f"{question} {option}"
 
             # Tokenize the input text
-            input_ids = tokenizer(input_text, return_tensors='pt').input_ids.to(device)
+            inputs = tokenizer(input_text, return_tensors='pt', padding=True, truncation=True)
+            input_ids = inputs.input_ids.to(device)
+            attention_mask = inputs.attention_mask.to(device)  # Include attention mask
 
             # Get model output (logits)
             with torch.no_grad():
-                outputs = model(input_ids)
+                outputs = model(input_ids, attention_mask=attention_mask)
                 logits = outputs.logits
 
             # We want the logits of the last token (the token predicting the next word)
